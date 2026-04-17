@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 import shutil
 import time
 from dataclasses import dataclass
@@ -26,6 +27,10 @@ from rich.progress import (
 from rich.table import Column
 
 LOGGER = logging.getLogger(__name__)
+CLOCK_TIME_PATTERN = re.compile(
+    r"^\s*(?P<hour>\d{1,2}):(?P<minute>\d{2})(?:\s*(?P<period>am|pm))?\s*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -149,6 +154,10 @@ def resolve_schedule_datetime(schedule: float | str, now: dt.datetime) -> dt.dat
 
 
 def parse_schedule_datetime(schedule: str, now: dt.datetime) -> dt.datetime:
+    clock_time = parse_clock_time(schedule, now)
+    if clock_time is not None:
+        return clock_time
+
     parsed = dateparser.parse(
         schedule,
         settings={
@@ -172,6 +181,40 @@ def parse_schedule_datetime(schedule: str, now: dt.datetime) -> dt.datetime:
 def schedule_looks_like_clock_time(schedule: str) -> bool:
     text = schedule.strip()
     return ":" in text and len(text) <= 8
+
+
+def parse_clock_time(schedule: str, now: dt.datetime) -> dt.datetime | None:
+    match = CLOCK_TIME_PATTERN.fullmatch(schedule)
+    if match is None:
+        return None
+
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute"))
+    period = match.group("period")
+
+    if period is None:
+        if hour > 23:
+            raise ValueError(f"could not parse schedule: {schedule!r}")
+    else:
+        if hour < 1 or hour > 12:
+            raise ValueError(f"could not parse schedule: {schedule!r}")
+        if period.lower() == "am":
+            hour = 0 if hour == 12 else hour
+        else:
+            hour = 12 if hour == 12 else hour + 12
+
+    if minute > 59:
+        raise ValueError(f"could not parse schedule: {schedule!r}")
+
+    scheduled_for = now.replace(
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
+    )
+    if scheduled_for <= now:
+        scheduled_for = scheduled_for + dt.timedelta(days=1)
+    return scheduled_for
 
 
 def wait_for_schedule(

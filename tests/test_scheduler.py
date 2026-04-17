@@ -8,6 +8,7 @@ import libtmux
 from tmux_scheduler.scheduler import (
     ScheduleItem,
     build_progress,
+    parse_schedule_datetime,
     preview_input,
     resolve_schedule,
     send_input,
@@ -79,3 +80,29 @@ def test_resolve_schedule_preserves_input_order() -> None:
 
     assert [item.item.input for item in resolved] == ["first", "second", "third"]
     assert [item.wait_seconds for item in resolved] == [10.0, 1.0, 5.0]
+
+
+def test_parse_schedule_datetime_treats_hh_mm_as_time_of_day() -> None:
+    now = dt.datetime(2026, 4, 17, 10, 3, tzinfo=dt.timezone(dt.timedelta(hours=-7)))
+
+    parsed = parse_schedule_datetime("10:10", now)
+
+    assert parsed == dt.datetime(
+        2026, 4, 17, 10, 10, tzinfo=dt.timezone(dt.timedelta(hours=-7))
+    )
+
+
+def test_parse_schedule_datetime_rolls_past_clock_time_to_next_day() -> None:
+    now = dt.datetime(2026, 4, 17, 11, 0, tzinfo=dt.timezone.utc)
+
+    parsed = parse_schedule_datetime("10:10", now)
+
+    assert parsed == dt.datetime(2026, 4, 18, 10, 10, tzinfo=dt.timezone.utc)
+
+
+def test_parse_schedule_datetime_supports_am_pm_clock_time() -> None:
+    now = dt.datetime(2026, 4, 17, 10, 3, tzinfo=dt.timezone.utc)
+
+    parsed = parse_schedule_datetime("10:10pm", now)
+
+    assert parsed == dt.datetime(2026, 4, 17, 22, 10, tzinfo=dt.timezone.utc)
