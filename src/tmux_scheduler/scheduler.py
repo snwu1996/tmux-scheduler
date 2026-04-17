@@ -12,6 +12,16 @@ import dateparser
 import libtmux
 import yaml
 from rich.markup import escape
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,10 +51,7 @@ def run_schedule(schedule_path: Path) -> None:
     for index, resolved_item in enumerate(schedule, start=1):
         LOGGER.info(format_scheduled_input(index, len(schedule), resolved_item))
 
-    for index, resolved_item in enumerate(schedule, start=1):
-        sleep_until(resolved_item.scheduled_for)
-        LOGGER.info("Sending scheduled input %d/%d", index, len(schedule))
-        send_input(server, resolved_item.item)
+    wait_for_schedule(server, schedule)
 
 
 def load_schedule(schedule_path: Path) -> list[ScheduleItem]:
@@ -165,12 +172,78 @@ def schedule_looks_like_clock_time(schedule: str) -> bool:
     return ":" in text and len(text) <= 8
 
 
-def sleep_until(target: dt.datetime) -> None:
-    while True:
-        remaining = (target - dt.datetime.now().astimezone()).total_seconds()
-        if remaining <= 0:
-            return
-        time.sleep(remaining)
+def wait_for_schedule(
+    server: libtmux.Server, schedule: list[ResolvedScheduleItem]
+) -> None:
+    if not schedule:
+        return
+
+    progress = Progress(
+        SpinnerColumn(style="bright_yellow"),
+        TextColumn(
+            "[bold]{task.fields[item_label]}[/] "
+            "[cyan]{task.fields[session]}[/]"
+        ),
+        BarColumn(bar_width=None, complete_style="bright_green", finished_style="green"),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        TextColumn("[dim]{task.fields[input_preview]}[/]"),
+    )
+
+    with progress:
+        task_ids: list[TaskID] = []
+        for index, resolved_item in enumerate(schedule, start=1):
+            item = resolved_item.item
+            session_target = item.session if item.session is not None else "<only session>"
+            total_wait = max(resolved_item.wait_seconds, 0.0)
+            task_id = progress.add_task(
+                "wait",
+                total=max(total_wait, 1.0),
+                completed=0,
+                item_label=f"{index}/{len(schedule)}",
+                session=escape(session_target),
+                input_preview=escape(preview_input(item.input)),
+            )
+            if total_wait == 0:
+                progress.update(task_id, completed=1.0)
+            task_ids.append(task_id)
+
+        sent_indices: set[int] = set()
+        while True:
+            now = dt.datetime.now().astimezone()
+
+            for index, resolved_item in enumerate(schedule):
+                task_id = task_ids[index]
+                total_wait = max(resolved_item.wait_seconds, 0.0)
+                remaining = (resolved_item.scheduled_for - now).total_seconds()
+                completed = total_wait if remaining <= 0 else max(0.0, total_wait - remaining)
+                progress.update(task_id, completed=max(completed, 1.0 if total_wait == 0 else completed))
+
+                if remaining <= 0 and index not in sent_indices:
+                    LOGGER.info("Sending scheduled input %d/%d", index + 1, len(schedule))
+                    send_input(server, resolved_item.item)
+                    sent_indices.add(index)
+
+            if len(sent_indices) == len(schedule):
+                return
+
+            next_due = min(
+                (
+                    (resolved_item.scheduled_for - now).total_seconds()
+                    for index, resolved_item in enumerate(schedule)
+                    if index not in sent_indices
+                ),
+                default=0.1,
+            )
+            time.sleep(min(0.1, max(next_due, 0.0)))
+
+
+def preview_input(user_input: str, max_length: int = 48) -> str:
+    compact = " ".join(user_input.split())
+    if len(compact) <= max_length:
+        return compact
+    return f"{compact[: max_length - 3]}..."
 
 
 def resolve_target_pane(server: libtmux.Server, target: str | None):

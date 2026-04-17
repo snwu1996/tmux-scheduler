@@ -22,7 +22,7 @@ poetry shell
 poetry run tmux-scheduler -i schedule.yaml
 ```
 
-The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text.
+The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text. While each item is waiting, it also renders a Rich progress bar with elapsed time, remaining time, and a preview of the input being queued.
 
 ## Schedule format
 
