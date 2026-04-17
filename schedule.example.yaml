@@ -1,15 +1,47 @@
-- schedule: 14400
+- schedule: 30
   session:
   input: |
-    export APP_ENV=dev
-    export LOG_LEVEL=debug
-    cd ~/projects/my-app
+    echo "Bootstrapping the only tmux session"
+    cd ~/projects/control-plane
+    git status --short
+    poetry run python -m control_plane.healthcheck
+
+- schedule: "5 minutes"
+  session: ops:0
+  input: |
+    echo "Refreshing worker configuration"
+    cd ~/projects/control-plane
+    export APP_ENV=staging
+    export LOG_LEVEL=info
+    poetry run python scripts/sync_workers.py --region us-west-2
+
+- schedule: "20 minutes later"
+  session: ops:1
+  input: |
+    echo "Starting long-running reconciliation"
+    cd ~/projects/control-plane
     source .venv/bin/activate
-    python manage.py migrate
-    python manage.py runserver
+    python -m control_plane.reconcile \
+      --all-clusters \
+      --max-parallel 4 \
+      --retry-failed
+
 - schedule: "1 hour later"
-  session: worker:0
-  input: python job.py
+  session: logs:0.1
+  input: |
+    echo "Collecting diagnostics"
+    cd ~/projects/control-plane
+    mkdir -p /tmp/control-plane-debug
+    journalctl --since "90 minutes ago" --no-pager > /tmp/control-plane-debug/journal.log
+    kubectl get pods -A > /tmp/control-plane-debug/pods.txt
+    kubectl describe nodes > /tmp/control-plane-debug/nodes.txt
+
 - schedule: "23:00"
-  session: worker:0.1
-  input: python job.py
+  session: reports:0
+  input: |
+    echo "Generating nightly summary"
+    cd ~/projects/control-plane
+    poetry run python scripts/nightly_report.py \
+      --date yesterday \
+      --format markdown \
+      --output reports/nightly-summary.md
