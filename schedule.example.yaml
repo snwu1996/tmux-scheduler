@@ -1,0 +1,12 @@
+- delay: 1
+  session:
+  input: |
+    export APP_ENV=dev
+    export LOG_LEVEL=debug
+    cd ~/projects/my-app
+    source .venv/bin/activate
+    python manage.py migrate
+    python manage.py runserver
+- delay: 5
+  session: worker:0
+  input: python job.py

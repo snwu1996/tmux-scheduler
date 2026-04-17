@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "tmux-scheduler"
+version = "0.1.0"
+description = "Schedule delayed input to tmux sessions from a YAML file."
+authors = []
+readme = "README.md"
+packages = [{ include = "tmux_scheduler", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+PyYAML = "^6.0"
+libtmux = ">=0.55,<0.56"
+
+[tool.poetry.scripts]
+tmux-scheduler = "tmux_scheduler.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
