@@ -10,6 +10,7 @@ packages = [{ include = "tmux_scheduler", from = "src" }]
 python = "^3.10"
 PyYAML = "^6.0"
 libtmux = ">=0.55,<0.56"
+rich = "^14.0.0"
 
 [tool.poetry.scripts]
 tmux-scheduler = "tmux_scheduler.cli:main"

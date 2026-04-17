@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
+
+from rich.logging import RichHandler
 
 from .scheduler import run_schedule
 
@@ -25,6 +28,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+        handlers=[
+            RichHandler(
+                markup=True,
+                rich_tracebacks=True,
+                show_path=True,
+                show_time=False,
+            )
+        ],
+    )
 
     try:
         run_schedule(args.input)

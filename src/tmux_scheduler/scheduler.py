@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from typing import Any
 
 import libtmux
 import yaml
+from rich.markup import escape
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,9 +27,12 @@ def run_schedule(schedule_path: Path) -> None:
 
     schedule = load_schedule(schedule_path)
     server = libtmux.Server()
+    LOGGER.info("Loaded %d scheduled input(s) from %s", len(schedule), schedule_path)
 
-    for item in schedule:
+    for index, item in enumerate(schedule, start=1):
+        LOGGER.info(format_scheduled_input(index, len(schedule), item))
         time.sleep(item.delay)
+        LOGGER.info("Sending scheduled input %d/%d", index, len(schedule))
         send_input(server, item)
 
 
@@ -69,6 +76,16 @@ def parse_item(index: int, item: Any) -> ScheduleItem:
 def send_input(server: libtmux.Server, item: ScheduleItem) -> None:
     pane = resolve_target_pane(server, item.session)
     pane.send_keys(item.input, enter=True)
+
+
+def format_scheduled_input(index: int, total: int, item: ScheduleItem) -> str:
+    session_target = item.session if item.session is not None else "<only session>"
+    return (
+        f"[bold]Scheduled input {index}/{total}[/] "
+        f"[bold bright_yellow]delay[/]=[bright_yellow]{item.delay:g}s[/] "
+        f"[bold bright_cyan]session[/]=[bright_cyan]{escape(session_target)}[/]\n"
+        f"[dim]{escape(item.input)}[/]"
+    )
 
 
 def resolve_target_pane(server: libtmux.Server, target: str | None):

@@ -16,6 +16,8 @@ pip install -e .
 tmux-scheduler -i schedule.yaml
 ```
 
+The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text.
+
 ## Schedule format
 
 The input file must be a YAML list. Each item must define:
