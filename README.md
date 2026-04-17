@@ -22,7 +22,7 @@ poetry shell
 poetry run tmux-scheduler -i schedule.yaml
 ```
 
-The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text. While each item is waiting, it also renders a Rich progress bar with elapsed time, remaining time, and a preview of the input being queued.
+The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text. Wait durations are rendered with `humanize` for easier reading. While each item is waiting, it also renders a Rich progress bar with elapsed time, remaining time, and a preview of the input being queued.
 
 ## Schedule format
 
@@ -37,6 +37,8 @@ The `schedule` field supports:
 - a number, treated as seconds from now, for example `14400`
 - a relative time string parsed by `dateparser`, for example `"1 hour later"`
 - a clock time string parsed by `dateparser`, for example `"23:00"`
+
+`humanize` is used for display formatting of wait durations in the CLI output. Schedule parsing still uses `dateparser`, because `humanize` does not parse natural-language schedule expressions.
 
 For clock times like `"23:00"`, if that time has already passed today, `tmux-scheduler` schedules it for the next day.
 

@@ -8,10 +8,12 @@ import libtmux
 from tmux_scheduler.scheduler import (
     ScheduleItem,
     build_progress,
+    format_scheduled_input,
     parse_schedule_datetime,
     preview_input,
     resolve_schedule,
     send_input,
+    ResolvedScheduleItem,
 )
 
 
@@ -106,3 +108,15 @@ def test_parse_schedule_datetime_supports_am_pm_clock_time() -> None:
     parsed = parse_schedule_datetime("10:10pm", now)
 
     assert parsed == dt.datetime(2026, 4, 17, 22, 10, tzinfo=dt.timezone.utc)
+
+
+def test_format_scheduled_input_humanizes_wait_time() -> None:
+    resolved_item = ResolvedScheduleItem(
+        scheduled_for=dt.datetime(2026, 4, 17, 12, 1, 5, tzinfo=dt.timezone.utc),
+        wait_seconds=65,
+        item=ScheduleItem(schedule="1 minute later", session="worker", input="echo hi"),
+    )
+
+    formatted = format_scheduled_input(1, 1, resolved_item)
+
+    assert "65s (1 minute and 5 seconds)" in formatted

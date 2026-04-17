@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import dateparser
+import humanize
 import libtmux
 import yaml
 from rich.markup import escape
@@ -114,7 +115,7 @@ def format_scheduled_input(
     return (
         f"[bold]Scheduled input {index}/{total}[/] "
         f"[bold bright_yellow]schedule[/]=[bright_yellow]{escape(str(item.schedule))}[/] "
-        f"[bold bright_magenta]wait[/]=[bright_magenta]{resolved_item.wait_seconds:g}s[/] "
+        f"[bold bright_magenta]wait[/]=[bright_magenta]{format_wait_duration(resolved_item.wait_seconds)}[/] "
         f"[bold bright_cyan]session[/]=[bright_cyan]{escape(session_target)}[/]\n"
         f"[dim]{escape(item.input)}[/]"
     )
@@ -127,6 +128,17 @@ def is_valid_schedule(schedule: Any) -> bool:
         or isinstance(schedule, str)
         and bool(schedule.strip())
     )
+
+
+def format_wait_duration(wait_seconds: float) -> str:
+    rounded_seconds = max(wait_seconds, 0.0)
+    concise_seconds = f"{rounded_seconds:g}s"
+    humanized = humanize.precisedelta(
+        rounded_seconds,
+        minimum_unit="seconds",
+        format="%0.0f",
+    )
+    return f"{concise_seconds} ({humanized})"
 
 
 def resolve_schedule(items: list[ScheduleItem]) -> list[ResolvedScheduleItem]:
