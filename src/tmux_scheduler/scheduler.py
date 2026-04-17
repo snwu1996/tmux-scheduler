@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import shutil
 import time
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import dateparser
 import libtmux
 import yaml
 from rich.markup import escape
@@ -16,24 +18,33 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ScheduleItem:
-    delay: float
+    schedule: float | str
     session: str | None
     input: str
+
+
+@dataclass(frozen=True)
+class ResolvedScheduleItem:
+    scheduled_for: dt.datetime
+    wait_seconds: float
+    item: ScheduleItem
 
 
 def run_schedule(schedule_path: Path) -> None:
     if shutil.which("tmux") is None:
         raise RuntimeError("tmux is not installed or not on PATH")
 
-    schedule = load_schedule(schedule_path)
+    schedule = resolve_schedule(load_schedule(schedule_path))
     server = libtmux.Server()
     LOGGER.info("Loaded %d scheduled input(s) from %s", len(schedule), schedule_path)
 
-    for index, item in enumerate(schedule, start=1):
-        LOGGER.info(format_scheduled_input(index, len(schedule), item))
-        time.sleep(item.delay)
+    for index, resolved_item in enumerate(schedule, start=1):
+        LOGGER.info(format_scheduled_input(index, len(schedule), resolved_item))
+
+    for index, resolved_item in enumerate(schedule, start=1):
+        sleep_until(resolved_item.scheduled_for)
         LOGGER.info("Sending scheduled input %d/%d", index, len(schedule))
-        send_input(server, item)
+        send_input(server, resolved_item.item)
 
 
 def load_schedule(schedule_path: Path) -> list[ScheduleItem]:
@@ -53,24 +64,24 @@ def parse_item(index: int, item: Any) -> ScheduleItem:
     if not isinstance(item, dict):
         raise ValueError(f"schedule item {index} must be a mapping")
 
-    missing = [field for field in ("delay", "input") if field not in item]
+    missing = [field for field in ("schedule", "input") if field not in item]
     if missing:
         raise ValueError(
             f"schedule item {index} is missing required fields: {', '.join(missing)}"
         )
 
-    delay = item["delay"]
+    schedule = item["schedule"]
     session = item.get("session")
     user_input = item["input"]
 
-    if not isinstance(delay, (int, float)) or delay < 0:
-        raise ValueError(f"schedule item {index} has invalid delay: {delay!r}")
+    if not is_valid_schedule(schedule):
+        raise ValueError(f"schedule item {index} has invalid schedule: {schedule!r}")
     if session is not None and (not isinstance(session, str) or not session.strip()):
         raise ValueError(f"schedule item {index} has invalid session: {session!r}")
     if not isinstance(user_input, str):
         raise ValueError(f"schedule item {index} has invalid input: {user_input!r}")
 
-    return ScheduleItem(delay=float(delay), session=session, input=user_input)
+    return ScheduleItem(schedule=schedule, session=session, input=user_input)
 
 
 def send_input(server: libtmux.Server, item: ScheduleItem) -> None:
@@ -78,14 +89,85 @@ def send_input(server: libtmux.Server, item: ScheduleItem) -> None:
     pane.send_keys(item.input, enter=True)
 
 
-def format_scheduled_input(index: int, total: int, item: ScheduleItem) -> str:
+def format_scheduled_input(
+    index: int, total: int, resolved_item: ResolvedScheduleItem
+) -> str:
+    item = resolved_item.item
     session_target = item.session if item.session is not None else "<only session>"
     return (
         f"[bold]Scheduled input {index}/{total}[/] "
-        f"[bold bright_yellow]delay[/]=[bright_yellow]{item.delay:g}s[/] "
+        f"[bold bright_yellow]schedule[/]=[bright_yellow]{escape(str(item.schedule))}[/] "
+        f"[bold bright_magenta]wait[/]=[bright_magenta]{resolved_item.wait_seconds:g}s[/] "
         f"[bold bright_cyan]session[/]=[bright_cyan]{escape(session_target)}[/]\n"
         f"[dim]{escape(item.input)}[/]"
     )
+
+
+def is_valid_schedule(schedule: Any) -> bool:
+    return (
+        isinstance(schedule, (int, float))
+        and schedule >= 0
+        or isinstance(schedule, str)
+        and bool(schedule.strip())
+    )
+
+
+def resolve_schedule(items: list[ScheduleItem]) -> list[ResolvedScheduleItem]:
+    now = dt.datetime.now().astimezone()
+    resolved_items = []
+    for item in items:
+        scheduled_for = resolve_schedule_datetime(item.schedule, now)
+        wait_seconds = (scheduled_for - now).total_seconds()
+        if wait_seconds < 0:
+            raise ValueError(f"schedule resolves to a past time: {item.schedule!r}")
+        resolved_items.append(
+            ResolvedScheduleItem(
+                scheduled_for=scheduled_for,
+                wait_seconds=wait_seconds,
+                item=item,
+            )
+        )
+    return sorted(resolved_items, key=lambda entry: entry.scheduled_for)
+
+
+def resolve_schedule_datetime(schedule: float | str, now: dt.datetime) -> dt.datetime:
+    if isinstance(schedule, (int, float)):
+        return now + dt.timedelta(seconds=float(schedule))
+    return parse_schedule_datetime(schedule, now)
+
+
+def parse_schedule_datetime(schedule: str, now: dt.datetime) -> dt.datetime:
+    parsed = dateparser.parse(
+        schedule,
+        settings={
+            "RELATIVE_BASE": now,
+            "PREFER_DATES_FROM": "future",
+            "RETURN_AS_TIMEZONE_AWARE": True,
+        },
+    )
+    if parsed is None:
+        raise ValueError(f"could not parse schedule: {schedule!r}")
+
+    if schedule_looks_like_clock_time(schedule) and parsed <= now:
+        parsed = parsed + dt.timedelta(days=1)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=now.tzinfo)
+
+    return parsed
+
+
+def schedule_looks_like_clock_time(schedule: str) -> bool:
+    text = schedule.strip()
+    return ":" in text and len(text) <= 8
+
+
+def sleep_until(target: dt.datetime) -> None:
+    while True:
+        remaining = (target - dt.datetime.now().astimezone()).total_seconds()
+        if remaining <= 0:
+            return
+        time.sleep(remaining)
 
 
 def resolve_target_pane(server: libtmux.Server, target: str | None):

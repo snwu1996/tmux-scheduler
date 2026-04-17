@@ -1,4 +1,4 @@
-- delay: 1
+- schedule: 14400
   session:
   input: |
     export APP_ENV=dev
@@ -7,6 +7,9 @@
     source .venv/bin/activate
     python manage.py migrate
     python manage.py runserver
-- delay: 5
+- schedule: "1 hour later"
   session: worker:0
+  input: python job.py
+- schedule: "23:00"
+  session: worker:0.1
   input: python job.py

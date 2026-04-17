@@ -7,13 +7,19 @@ It uses `libtmux` to connect to the active tmux server and send keys to panes.
 ## Install
 
 ```bash
-pip install -e .
+poetry install
+```
+
+To enter the virtualenv shell:
+
+```bash
+poetry shell
 ```
 
 ## Usage
 
 ```bash
-tmux-scheduler -i schedule.yaml
+poetry run tmux-scheduler -i schedule.yaml
 ```
 
 The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text.
@@ -22,9 +28,17 @@ The CLI uses `rich` logging to show each scheduled input before it waits and sen
 
 The input file must be a YAML list. Each item must define:
 
-- `delay`: seconds to wait before sending the input
+- `schedule`: when to send the input
 - `session`: tmux target to send input to, or `null` to use the only running tmux session
 - `input`: text to send
+
+The `schedule` field supports:
+
+- a number, treated as seconds from now, for example `14400`
+- a relative time string parsed by `dateparser`, for example `"1 hour later"`
+- a clock time string parsed by `dateparser`, for example `"23:00"`
+
+For clock times like `"23:00"`, if that time has already passed today, `tmux-scheduler` schedules it for the next day.
 
 Targets are resolved in this order:
 
@@ -39,7 +53,7 @@ If `session` is `null`, `tmux-scheduler` will send the input to the active pane 
 Example:
 
 ```yaml
-- delay: 1
+- schedule: 14400
   session:
   input: |
     export APP_ENV=dev
@@ -48,7 +62,10 @@ Example:
     source .venv/bin/activate
     python manage.py migrate
     python manage.py runserver
-- delay: 5
+- schedule: "1 hour later"
   session: worker:0
+  input: python job.py
+- schedule: "23:00"
+  session: worker:0.1
   input: python job.py
 ```
