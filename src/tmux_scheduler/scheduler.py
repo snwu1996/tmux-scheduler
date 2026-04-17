@@ -12,6 +12,7 @@ import dateparser
 import libtmux
 import yaml
 from rich.markup import escape
+from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -22,6 +23,7 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from rich.table import Column
 
 LOGGER = logging.getLogger(__name__)
 
@@ -137,7 +139,7 @@ def resolve_schedule(items: list[ScheduleItem]) -> list[ResolvedScheduleItem]:
                 item=item,
             )
         )
-    return sorted(resolved_items, key=lambda entry: entry.scheduled_for)
+    return resolved_items
 
 
 def resolve_schedule_datetime(schedule: float | str, now: dt.datetime) -> dt.datetime:
@@ -178,18 +180,7 @@ def wait_for_schedule(
     if not schedule:
         return
 
-    progress = Progress(
-        SpinnerColumn(style="bright_yellow"),
-        TextColumn(
-            "[bold]{task.fields[item_label]}[/] "
-            "[cyan]{task.fields[session]}[/]"
-        ),
-        BarColumn(bar_width=None, complete_style="bright_green", finished_style="green"),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-        TextColumn("[dim]{task.fields[input_preview]}[/]"),
-    )
+    progress = build_progress()
 
     with progress:
         task_ids: list[TaskID] = []
@@ -237,6 +228,35 @@ def wait_for_schedule(
                 default=0.1,
             )
             time.sleep(min(0.1, max(next_due, 0.0)))
+
+
+def build_progress(console: Console | None = None) -> Progress:
+    return Progress(
+        SpinnerColumn(
+            style="bright_yellow",
+            table_column=Column(width=1, no_wrap=True),
+        ),
+        TextColumn(
+            "[bold]{task.fields[item_label]}[/] "
+            "[cyan]{task.fields[session]}[/]",
+            table_column=Column(ratio=1, no_wrap=True, overflow="ellipsis"),
+        ),
+        BarColumn(
+            bar_width=None,
+            complete_style="bright_green",
+            finished_style="green",
+            table_column=Column(ratio=2, min_width=8),
+        ),
+        TaskProgressColumn(table_column=Column(width=4, no_wrap=True)),
+        TimeElapsedColumn(table_column=Column(width=8, no_wrap=True)),
+        TimeRemainingColumn(table_column=Column(width=8, no_wrap=True)),
+        TextColumn(
+            "[dim]{task.fields[input_preview]}[/]",
+            table_column=Column(ratio=2, no_wrap=True, overflow="ellipsis"),
+        ),
+        console=console,
+        expand=True,
+    )
 
 
 def preview_input(user_input: str, max_length: int = 48) -> str:
