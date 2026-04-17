@@ -7,6 +7,7 @@ import libtmux
 
 from tmux_scheduler.scheduler import (
     ScheduleItem,
+    wait_for_schedule,
     build_progress,
     format_scheduled_input,
     parse_schedule_datetime,
@@ -120,3 +121,27 @@ def test_format_scheduled_input_humanizes_wait_time() -> None:
     formatted = format_scheduled_input(1, 1, resolved_item)
 
     assert "65s (1 minute and 5 seconds)" in formatted
+
+
+def test_wait_for_schedule_dry_run_skips_send_input() -> None:
+    now = dt.datetime(2026, 4, 17, 12, 0, tzinfo=dt.timezone.utc)
+    schedule = [
+        ResolvedScheduleItem(
+            scheduled_for=now,
+            wait_seconds=0,
+            item=ScheduleItem(schedule=0, session="worker", input="echo hi"),
+        )
+    ]
+
+    with patch("tmux_scheduler.scheduler.build_progress") as build_progress:
+        progress = build_progress.return_value
+        progress.__enter__.return_value = progress
+        progress.__exit__.return_value = None
+        progress.add_task.return_value = 1
+
+        with patch("tmux_scheduler.scheduler.send_input") as send_input:
+            with patch("tmux_scheduler.scheduler.dt.datetime") as mock_datetime:
+                mock_datetime.now.return_value = now
+                wait_for_schedule(server=None, schedule=schedule, dry_run=True)
+
+    send_input.assert_not_called()

@@ -22,6 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Path to a YAML schedule file.",
     )
+    parser.add_argument(
+        "-d",
+        "--dry_run",
+        action="store_true",
+        help="Wait through the schedule without sending input to tmux.",
+    )
     return parser
 
 
@@ -42,7 +48,7 @@ def main() -> int:
     )
 
     try:
-        run_schedule(args.input)
+        run_schedule(args.input, dry_run=args.dry_run)
     except Exception as exc:  # pragma: no cover - top-level CLI error path
         print(f"Error: {exc}", file=sys.stderr)
         return 1

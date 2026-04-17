@@ -48,18 +48,20 @@ class ResolvedScheduleItem:
     item: ScheduleItem
 
 
-def run_schedule(schedule_path: Path) -> None:
-    if shutil.which("tmux") is None:
+def run_schedule(schedule_path: Path, dry_run: bool = False) -> None:
+    schedule = resolve_schedule(load_schedule(schedule_path))
+    if not dry_run and shutil.which("tmux") is None:
         raise RuntimeError("tmux is not installed or not on PATH")
 
-    schedule = resolve_schedule(load_schedule(schedule_path))
-    server = libtmux.Server()
+    server = None if dry_run else libtmux.Server()
     LOGGER.info("Loaded %d scheduled input(s) from %s", len(schedule), schedule_path)
+    if dry_run:
+        LOGGER.info("Dry run enabled: scheduled input will not be sent to tmux")
 
     for index, resolved_item in enumerate(schedule, start=1):
         LOGGER.info(format_scheduled_input(index, len(schedule), resolved_item))
 
-    wait_for_schedule(server, schedule)
+    wait_for_schedule(server, schedule, dry_run=dry_run)
 
 
 def load_schedule(schedule_path: Path) -> list[ScheduleItem]:
@@ -230,7 +232,9 @@ def parse_clock_time(schedule: str, now: dt.datetime) -> dt.datetime | None:
 
 
 def wait_for_schedule(
-    server: libtmux.Server, schedule: list[ResolvedScheduleItem]
+    server: libtmux.Server | None,
+    schedule: list[ResolvedScheduleItem],
+    dry_run: bool = False,
 ) -> None:
     if not schedule:
         return
@@ -267,8 +271,17 @@ def wait_for_schedule(
                 progress.update(task_id, completed=max(completed, 1.0 if total_wait == 0 else completed))
 
                 if remaining <= 0 and index not in sent_indices:
-                    LOGGER.info("Sending scheduled input %d/%d", index + 1, len(schedule))
-                    send_input(server, resolved_item.item)
+                    if dry_run:
+                        LOGGER.info(
+                            "Dry run: would send scheduled input %d/%d",
+                            index + 1,
+                            len(schedule),
+                        )
+                    else:
+                        if server is None:
+                            raise RuntimeError("tmux server is unavailable")
+                        LOGGER.info("Sending scheduled input %d/%d", index + 1, len(schedule))
+                        send_input(server, resolved_item.item)
                     sent_indices.add(index)
 
             if len(sent_indices) == len(schedule):

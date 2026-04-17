@@ -22,6 +22,8 @@ poetry shell
 poetry run tmux-scheduler -i schedule.yaml
 ```
 
+Use `-d` or `--dry_run` to execute the schedule timing without sending any input to tmux.
+
 The CLI uses `rich` logging to show each scheduled input before it waits and sends it, with highlighted delay and session fields and dimmed input text. Wait durations are rendered with `humanize` for easier reading. While each item is waiting, it also renders a Rich progress bar with elapsed time, remaining time, and a preview of the input being queued.
 
 ## Schedule format
