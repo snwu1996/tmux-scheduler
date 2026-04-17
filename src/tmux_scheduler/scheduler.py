@@ -86,7 +86,10 @@ def parse_item(index: int, item: Any) -> ScheduleItem:
 
 def send_input(server: libtmux.Server, item: ScheduleItem) -> None:
     pane = resolve_target_pane(server, item.session)
-    pane.send_keys(item.input, enter=True)
+    if pane is None:
+        raise RuntimeError("resolved tmux pane is unavailable")
+    pane.send_keys(item.input, enter=False)
+    pane.enter()
 
 
 def format_scheduled_input(
