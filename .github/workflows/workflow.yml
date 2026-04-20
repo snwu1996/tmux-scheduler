@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build and test release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Verify tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import tomllib
+
+          ref = os.environ["GITHUB_REF_NAME"]
+          if not re.fullmatch(r"v\d+\.\d+\.\d+", ref):
+              raise SystemExit(f"Unsupported release tag format: {ref}")
+
+          with open("pyproject.toml", "rb") as fh:
+              data = tomllib.load(fh)
+
+          package_version = data["tool"]["poetry"]["version"]
+          tag_version = ref[1:]
+          if package_version != tag_version:
+              raise SystemExit(
+                  f"Tag version {tag_version} does not match pyproject.toml version {package_version}"
+              )
+
+          print(f"Validated release tag {ref} against package version {package_version}")
+          PY
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Run tests
+        run: poetry run pytest
+
+      - name: Build distributions
+        run: poetry build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

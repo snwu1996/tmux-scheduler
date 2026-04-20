@@ -1,9 +1,22 @@
 [tool.poetry]
 name = "tmux-scheduler"
-version = "0.1.0"
+version = "1.0.0"
 description = "Schedule delayed input to tmux sessions from a YAML file."
-authors = []
+authors = ["Shunong Wu <shunongwu@gmail.com>"]
 readme = "README.md"
+homepage = "https://github.com/snwu1996/tmux-scheduler"
+repository = "https://github.com/snwu1996/tmux-scheduler"
+keywords = ["tmux", "scheduler", "cli", "automation"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
 packages = [{ include = "tmux_scheduler", from = "src" }]
 
 [tool.poetry.dependencies]
@@ -22,8 +35,6 @@ pyright = "^1.1.408"
 tmux-scheduler = "tmux_scheduler.cli:main"
 
 [tool.pyright]
-venvPath = "/home/snwu/.venvs"
-venv = "tmux-scheduler-zNmFrlcQ-py3.12"
 pythonVersion = "3.12"
 reportMissingModuleSource = false
 
