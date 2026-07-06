@@ -4,6 +4,7 @@ from typing import cast
 from unittest.mock import patch
 
 import libtmux
+import pytest
 
 from tmux_scheduler.scheduler import (
     ScheduleItem,
@@ -11,6 +12,7 @@ from tmux_scheduler.scheduler import (
     build_progress,
     format_scheduled_input,
     parse_schedule_datetime,
+    precheck_targets,
     preview_input,
     resolve_schedule,
     send_input,
@@ -37,6 +39,41 @@ def test_send_input_types_text_then_presses_enter() -> None:
         ("send_keys", 'echo "hello"', False),
         ("enter",),
     ]
+
+
+def test_precheck_targets_checks_each_unique_target_once() -> None:
+    items = [
+        ScheduleItem(schedule=0, session="worker", input="a"),
+        ScheduleItem(schedule=0, session="worker", input="b"),
+        ScheduleItem(schedule=0, session=None, input="c"),
+    ]
+
+    with patch(
+        "tmux_scheduler.scheduler.resolve_target_pane", return_value=object()
+    ) as resolve:
+        precheck_targets(cast(libtmux.Server, object()), items)
+
+    assert [call.args[1] for call in resolve.call_args_list] == ["worker", None]
+
+
+def test_precheck_targets_reports_all_unresolvable_targets() -> None:
+    items = [
+        ScheduleItem(schedule=0, session="worker", input="a"),
+        ScheduleItem(schedule=0, session="missing", input="b"),
+        ScheduleItem(schedule=0, session="gone:1.0", input="c"),
+    ]
+
+    def fake_resolve(server: libtmux.Server, target: str | None) -> object:
+        if target == "worker":
+            return object()
+        raise ValueError(f"could not resolve tmux target: {target!r}")
+
+    with patch("tmux_scheduler.scheduler.resolve_target_pane", side_effect=fake_resolve):
+        with pytest.raises(ValueError) as excinfo:
+            precheck_targets(cast(libtmux.Server, object()), items)
+
+    assert "could not resolve tmux target: 'missing'" in str(excinfo.value)
+    assert "could not resolve tmux target: 'gone:1.0'" in str(excinfo.value)
 
 
 def test_preview_input_compacts_whitespace_and_truncates() -> None:

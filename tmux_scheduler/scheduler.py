@@ -54,6 +54,9 @@ def run_schedule(schedule_path: Path, dry_run: bool = False) -> None:
         raise RuntimeError("tmux is not installed or not on PATH")
 
     server = None if dry_run else libtmux.Server()
+    if server is not None:
+        precheck_targets(server, [resolved_item.item for resolved_item in schedule])
+
     LOGGER.info("Loaded %d scheduled input(s) from %s", len(schedule), schedule_path)
     if dry_run:
         LOGGER.info("Dry run enabled: scheduled input will not be sent to tmux")
@@ -334,6 +337,21 @@ def preview_input(user_input: str, max_length: int = 48) -> str:
     return f"{compact[: max_length - 3]}..."
 
 
+def precheck_targets(server: libtmux.Server, items: list[ScheduleItem]) -> None:
+    errors = []
+    for target in dict.fromkeys(item.session for item in items):
+        try:
+            resolve_target_pane(server, target)
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    if errors:
+        raise ValueError(
+            "tmux target precheck failed:\n"
+            + "\n".join(f"  - {error}" for error in errors)
+        )
+
+
 def resolve_target_pane(server: libtmux.Server, target: str | None):
     if target is None:
         if len(server.sessions) != 1:
@@ -342,7 +360,7 @@ def resolve_target_pane(server: libtmux.Server, target: str | None):
             )
         return server.sessions[0].active_window.active_pane
 
-    session = server.sessions.get(session_name=target)
+    session = server.sessions.get(session_name=target, default=None)
     if session is not None:
         return session.active_window.active_pane
 
